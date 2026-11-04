@@ -1,5 +1,8 @@
 import telebot
 from telebot import types
+import os
+import threading
+from flask import Flask
 
 # ВСТАВЬ СЮДА СВОЙ ТОКЕН
 bot = telebot.TeleBot("9287903988:AAFgxZZVwAQzkqu81J8pRCdQCxbMz_9-jTo")
@@ -11,10 +14,21 @@ admins = {SUPER_ADMIN_ID}
 users_db = {}
 active_events = {}
 
+# --- ВЕБ-СЕРВЕР ДЛЯ RENDER ---
+app = Flask(__name__)
+
+@app.route('/')
+def health():
+    return "Bot is running", 200
+
+def run_flask():
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
+
+# --- ЛОГИКА БОТА ---
 
 def is_admin(user_id):
     return user_id in admins
-
 
 @bot.message_handler(commands=['start'])
 def start_private(message):
@@ -24,11 +38,9 @@ def start_private(message):
     else:
         bot.send_message(message.chat.id, "Бот-казначей запущен.")
 
-
 def save_name(message):
     users_db[message.from_user.id] = message.text
     bot.send_message(message.chat.id, f"Имя {message.text} сохранено.")
-
 
 @bot.message_handler(commands=['add_admin'])
 def add_admin(message):
@@ -39,7 +51,6 @@ def add_admin(message):
     else:
         bot.reply_to(message, "Ответь на сообщение пользователя, чтобы дать права.")
 
-
 @bot.message_handler(commands=['remove_admin'])
 def remove_admin(message):
     if message.from_user.id != SUPER_ADMIN_ID: return
@@ -48,7 +59,6 @@ def remove_admin(message):
         bot.reply_to(message, "Права отозваны.")
     else:
         bot.reply_to(message, "Ответь на сообщение пользователя, чтобы забрать права.")
-
 
 # --- ОТПРАВКА СООБЩЕНИЙ ---
 def send_event_message(chat_id, event_key):
@@ -70,8 +80,7 @@ def send_event_message(chat_id, event_key):
         for uid in event['members']:
             name = users_db.get(uid, "Неизвестный")
             if event['type'] == 'kopilka':
-                status = " [✅]" if event['members'][uid]['paid'] == 'confirmed' else " [⏳]" if event['members'][uid][
-                                                                                                   'paid'] == 'pending' else ""
+                status = " [✅]" if event['members'][uid]['paid'] == 'confirmed' else " [⏳]" if event['members'][uid]['paid'] == 'pending' else ""
                 text += f"{idx}. {name}{status}\n"
             else:
                 text += f"{idx}. {name}\n"
@@ -100,14 +109,11 @@ def send_event_message(chat_id, event_key):
         markup.add(types.InlineKeyboardButton("Я сдал", callback_data=f"pay_{event_key}"))
 
     try:
-        bot.edit_message_text(chat_id=chat_id, message_id=event['message_id'], text=text, reply_markup=markup,
-                              parse_mode='Markdown')
+        bot.edit_message_text(chat_id=chat_id, message_id=event['message_id'], text=text, reply_markup=markup, parse_mode='Markdown')
     except Exception:
         pass
 
-
 # --- КОМАНДЫ ---
-
 @bot.message_handler(commands=['kamorka'])
 def create_kamorka(message):
     if not is_admin(message.from_user.id): return
@@ -116,18 +122,15 @@ def create_kamorka(message):
         place = args[0].strip()
         time_ev = args[1].strip()
     except IndexError:
-        return bot.reply_to(message, "Формат: `/kamorka Место, Время`\nПример: `/kamorka Синий пандус, 19:00`",
-                            parse_mode='Markdown')
+        return bot.reply_to(message, "Формат: `/kamorka Место, Время`\nПример: `/kamorka Синий пандус, 19:00`", parse_mode='Markdown')
 
     chat_id = message.chat.id
     if chat_id not in active_events: active_events[chat_id] = {}
 
-    active_events[chat_id]['kamorka'] = {'type': 'list', 'title': "Сбор", 'details': f"Где: {place}\nКогда: {time_ev}",
-                                         'members': {}, 'message_id': None}
+    active_events[chat_id]['kamorka'] = {'type': 'list', 'title': "Сбор", 'details': f"Где: {place}\nКогда: {time_ev}", 'members': {}, 'message_id': None}
     msg = bot.send_message(chat_id, "Создаю...")
     active_events[chat_id]['kamorka']['message_id'] = msg.message_id
     send_event_message(chat_id, 'kamorka')
-
 
 @bot.message_handler(commands=['kopilka'])
 def create_kopilka(message):
@@ -141,21 +144,16 @@ def create_kopilka(message):
         requisites = parts[3].strip()
         check_to = parts[4].strip()
     except IndexError:
-        return bot.reply_to(message,
-                            "Формат: `/kopilka Месяц, Сумма, Дедлайн, Реквизиты, Кому чек`\nПример: `/kopilka Ноябрь, 500, 30.11, +79991234567, @admin`",
-                            parse_mode='Markdown')
+        return bot.reply_to(message, "Формат: `/kopilka Месяц, Сумма, Дедлайн, Реквизиты, Кому чек`\nПример: `/kopilka Ноябрь, 500, 30.11, +79991234567, @admin`", parse_mode='Markdown')
 
     chat_id = message.chat.id
     if chat_id not in active_events: active_events[chat_id] = {}
 
     details = f"Копилка за {month}\nСдать до {deadline}"
-    active_events[chat_id]['kopilka'] = {'type': 'kopilka', 'title': "Копилка", 'details': details, 'price': price,
-                                         'requisites': requisites, 'check_to': check_to, 'members': {},
-                                         'message_id': None}
+    active_events[chat_id]['kopilka'] = {'type': 'kopilka', 'title': "Копилка", 'details': details, 'price': price, 'requisites': requisites, 'check_to': check_to, 'members': {}, 'message_id': None}
     msg = bot.send_message(chat_id, "Создаю...")
     active_events[chat_id]['kopilka']['message_id'] = msg.message_id
     send_event_message(chat_id, 'kopilka')
-
 
 @bot.message_handler(commands=['hockey'])
 def create_hockey(message):
@@ -169,21 +167,16 @@ def create_hockey(message):
         requisites = args[3].strip()
         check_to = args[4].strip()
     except IndexError:
-        return bot.reply_to(message,
-                            "Формат: `/hockey Соперник, Время, Цена, Реквизиты, Кому чек`\nПример: `/hockey Динамо, 15.11_19:30, 1000, +79991234567, @admin`",
-                            parse_mode='Markdown')
+        return bot.reply_to(message, "Формат: `/hockey Соперник, Время, Цена, Реквизиты, Кому чек`\nПример: `/hockey Динамо, 15.11_19:30, 1000, +79991234567, @admin`", parse_mode='Markdown')
 
     chat_id = message.chat.id
     if chat_id not in active_events: active_events[chat_id] = {}
 
     details = f"Матч: Спартак - {opponent}\nВремя: {time_ev}"
-    active_events[chat_id]['hockey'] = {'type': 'hockey', 'title': "Хоккей", 'details': details, 'price': price,
-                                        'requisites': requisites, 'check_to': check_to, 'members': {},
-                                        'message_id': None}
+    active_events[chat_id]['hockey'] = {'type': 'hockey', 'title': "Хоккей", 'details': details, 'price': price, 'requisites': requisites, 'check_to': check_to, 'members': {}, 'message_id': None}
     msg = bot.send_message(chat_id, "Создаю...")
     active_events[chat_id]['hockey']['message_id'] = msg.message_id
     send_event_message(chat_id, 'hockey')
-
 
 # --- КНОПКИ ---
 @bot.callback_query_handler(func=lambda call: True)
@@ -193,7 +186,7 @@ def handle_buttons(call):
     data = call.data
 
     if data.startswith("confirm:"):
-        if call.from_user.id != SUPER_ADMIN_ID:
+        if call.from_user.id != SUPER_ADMIN_ID: 
             return bot.answer_callback_query(call.id, "Ты не админ.")
 
         _, ev_key, uid, target_chat_id = data.split(':')
@@ -276,6 +269,12 @@ def handle_buttons(call):
 
     send_event_message(chat_id, event_key)
 
-
-print("Бот запущен.")
-bot.infinity_polling()
+# ==========================================
+# ЗАПУСК
+# ==========================================
+if __name__ == "__main__":
+    # Запускаем Flask-сервер в фоновом потоке для Render
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    print("Бот запущен.")
+    bot.infinity_polling()
