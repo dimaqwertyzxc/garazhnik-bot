@@ -4,17 +4,13 @@ import os
 import threading
 from flask import Flask
 
-# ВСТАВЬ СЮДА СВОЙ ТОКЕН
 bot = telebot.TeleBot("9287903988:AAFgxZZVwAQzkqu81J8pRCdQCxbMz_9-jTo")
-
-# ТВОЙ ГЛАВНЫЙ ID (узнать у @userinfobot)
 SUPER_ADMIN_ID = 8290888308
 
 admins = {SUPER_ADMIN_ID}
 users_db = {}
 active_events = {}
 
-# --- ВЕБ-СЕРВЕР ДЛЯ RENDER ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -25,8 +21,6 @@ def run_flask():
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
 
-# --- ЛОГИКА БОТА ---
-
 def is_admin(user_id):
     return user_id in admins
 
@@ -36,7 +30,7 @@ def start_private(message):
         bot.send_message(message.chat.id, "Напиши свое имя для регистрации.")
         bot.register_next_step_handler(message, save_name)
     else:
-        bot.send_message(message.chat.id, "Бот-казначей запущен.", message_thread_id=message.message_thread_id)
+        bot.reply_to(message, "Бот-казначей запущен.")
 
 def save_name(message):
     users_db[message.from_user.id] = message.text
@@ -47,33 +41,28 @@ def add_admin(message):
     if message.from_user.id != SUPER_ADMIN_ID: return
     if message.reply_to_message:
         admins.add(message.reply_to_message.from_user.id)
-        bot.reply_to(message, f"Пользователь {message.reply_to_message.from_user.id} теперь админ.", message_thread_id=message.message_thread_id)
+        bot.reply_to(message, f"Пользователь {message.reply_to_message.from_user.id} теперь админ.")
     else:
-        bot.reply_to(message, "Ответь на сообщение пользователя, чтобы дать права.", message_thread_id=message.message_thread_id)
+        bot.reply_to(message, "Ответь на сообщение пользователя, чтобы дать права.")
 
 @bot.message_handler(commands=['remove_admin'])
 def remove_admin(message):
     if message.from_user.id != SUPER_ADMIN_ID: return
     if message.reply_to_message:
         admins.discard(message.reply_to_message.from_user.id)
-        bot.reply_to(message, "Права отозваны.", message_thread_id=message.message_thread_id)
+        bot.reply_to(message, "Права отозваны.")
     else:
-        bot.reply_to(message, "Ответь на сообщение пользователя, чтобы забрать права.", message_thread_id=message.message_thread_id)
+        bot.reply_to(message, "Ответь на сообщение пользователя, чтобы забрать права.")
 
-# --- ОТПРАВКА СООБЩЕНИЙ ---
-def send_event_message(chat_id, event_key, thread_id=None):
+def send_event_message(chat_id, event_key):
     event = active_events[chat_id][event_key]
     text = f"**{event['title']}**\n\n"
-
     if 'details' in event:
         text += f"{event['details']}\n\n"
-
     if event['type'] in ['hockey', 'kopilka']:
         text += f"Сумма: **{event['price']} руб.**\n"
-
     if event['type'] in ['kopilka', 'hockey']:
         text += f"Перевод: `{event['requisites']}`\nЧек: `{event['check_to']}`\n"
-
     text += "\n**СПИСОК:**\n"
     idx = 1
     if event['type'] in ['list', 'kopilka']:
@@ -113,29 +102,22 @@ def send_event_message(chat_id, event_key, thread_id=None):
     except Exception:
         pass
 
-# --- КОМАНДЫ ---
-
 @bot.message_handler(commands=['kamorka'])
 def create_kamorka(message):
-    # Удаляем команду пользователя
     try: bot.delete_message(message.chat.id, message.message_id)
     except: pass
-
-    if not is_admin(message.from_user.id): 
-        return bot.send_message(message.chat.id, "У тебя нет прав.", message_thread_id=message.message_thread_id)
-    
+    if not is_admin(message.from_user.id): return
     try:
         args = message.text.replace('/kamorka', '').strip().split(',')
-        place = args[0].strip()
-        time_ev = args[1].strip()
+        place, time_ev = args[0].strip(), args[1].strip()
     except IndexError:
-        return bot.send_message(message.chat.id, "Формат: `/kamorka Место, Время`", parse_mode='Markdown', message_thread_id=message.message_thread_id)
+        return bot.reply_to(message, "Формат: `/kamorka Место, Время`", parse_mode='Markdown')
 
     chat_id = message.chat.id
     if chat_id not in active_events: active_events[chat_id] = {}
-
     active_events[chat_id]['kamorka'] = {'type': 'list', 'title': "Сбор", 'details': f"Где: {place}\nКогда: {time_ev}", 'members': {}, 'message_id': None}
-    msg = bot.send_message(chat_id, "Создаю...", message_thread_id=message.message_thread_id)
+    
+    msg = bot.reply_to(message, "Создаю...")
     active_events[chat_id]['kamorka']['message_id'] = msg.message_id
     send_event_message(chat_id, 'kamorka')
 
@@ -143,27 +125,20 @@ def create_kamorka(message):
 def create_kopilka(message):
     try: bot.delete_message(message.chat.id, message.message_id)
     except: pass
-
-    if not is_admin(message.from_user.id): 
-        return bot.send_message(message.chat.id, "У тебя нет прав.", message_thread_id=message.message_thread_id)
-    
+    if not is_admin(message.from_user.id): return
     try:
         parts = message.text.replace('/kopilka', '').strip().split(',')
         if len(parts) < 5: raise IndexError
-        month = parts[0].strip().capitalize()
-        price = parts[1].strip()
-        deadline = parts[2].strip()
-        requisites = parts[3].strip()
-        check_to = parts[4].strip()
+        month, price, deadline, requisites, check_to = parts[0].strip().capitalize(), parts[1].strip(), parts[2].strip(), parts[3].strip(), parts[4].strip()
     except IndexError:
-        return bot.send_message(message.chat.id, "Формат: `/kopilka Месяц, Сумма, Дедлайн, Реквизиты, Кому чек`", parse_mode='Markdown', message_thread_id=message.message_thread_id)
+        return bot.reply_to(message, "Формат: `/kopilka Месяц, Сумма, Дедлайн, Реквизиты, Кому чек`", parse_mode='Markdown')
 
     chat_id = message.chat.id
     if chat_id not in active_events: active_events[chat_id] = {}
-
     details = f"Копилка за {month}\nСдать до {deadline}"
     active_events[chat_id]['kopilka'] = {'type': 'kopilka', 'title': "Копилка", 'details': details, 'price': price, 'requisites': requisites, 'check_to': check_to, 'members': {}, 'message_id': None}
-    msg = bot.send_message(chat_id, "Создаю...", message_thread_id=message.message_thread_id)
+    
+    msg = bot.reply_to(message, "Создаю...")
     active_events[chat_id]['kopilka']['message_id'] = msg.message_id
     send_event_message(chat_id, 'kopilka')
 
@@ -171,31 +146,23 @@ def create_kopilka(message):
 def create_hockey(message):
     try: bot.delete_message(message.chat.id, message.message_id)
     except: pass
-
-    if not is_admin(message.from_user.id): 
-        return bot.send_message(message.chat.id, "У тебя нет прав.", message_thread_id=message.message_thread_id)
-    
+    if not is_admin(message.from_user.id): return
     try:
         args = message.text.replace('/hockey', '').strip().split(',')
         if len(args) < 5: raise IndexError
-        opponent = args[0].strip()
-        time_ev = args[1].strip()
-        price = args[2].strip()
-        requisites = args[3].strip()
-        check_to = args[4].strip()
+        opponent, time_ev, price, requisites, check_to = args[0].strip(), args[1].strip(), args[2].strip(), args[3].strip(), args[4].strip()
     except IndexError:
-        return bot.send_message(message.chat.id, "Формат: `/hockey Соперник, Время, Цена, Реквизиты, Кому чек`", parse_mode='Markdown', message_thread_id=message.message_thread_id)
+        return bot.reply_to(message, "Формат: `/hockey Соперник, Время, Цена, Реквизиты, Кому чек`", parse_mode='Markdown')
 
     chat_id = message.chat.id
     if chat_id not in active_events: active_events[chat_id] = {}
-
     details = f"Матч: Спартак - {opponent}\nВремя: {time_ev}"
     active_events[chat_id]['hockey'] = {'type': 'hockey', 'title': "Хоккей", 'details': details, 'price': price, 'requisites': requisites, 'check_to': check_to, 'members': {}, 'message_id': None}
-    msg = bot.send_message(chat_id, "Создаю...", message_thread_id=message.message_thread_id)
+    
+    msg = bot.reply_to(message, "Создаю...")
     active_events[chat_id]['hockey']['message_id'] = msg.message_id
     send_event_message(chat_id, 'hockey')
 
-# --- КНОПКИ ---
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
     chat_id = call.message.chat.id
@@ -203,90 +170,56 @@ def handle_buttons(call):
     data = call.data
 
     if data.startswith("confirm:"):
-        if call.from_user.id != SUPER_ADMIN_ID: 
-            return bot.answer_callback_query(call.id, "Ты не админ.")
-
+        if call.from_user.id != SUPER_ADMIN_ID: return bot.answer_callback_query(call.id, "Ты не админ.")
         _, ev_key, uid, target_chat_id = data.split(':')
-        uid = int(uid)
-        target_chat_id = int(target_chat_id)
-
+        uid, target_chat_id = int(uid), int(target_chat_id)
         if target_chat_id in active_events and ev_key in active_events[target_chat_id]:
             if uid in active_events[target_chat_id][ev_key]['members']:
                 active_events[target_chat_id][ev_key]['members'][uid]['paid'] = 'confirmed'
                 send_event_message(target_chat_id, ev_key)
                 bot.answer_callback_query(call.id, "Оплата подтверждена.")
-            else:
-                bot.answer_callback_query(call.id, "Пользователь не найден.")
-        else:
-            bot.answer_callback_query(call.id, "Сбор не найден.")
         return
 
     parts = data.split('_')
-    action = parts[0]
-    event_key = parts[1]
+    action, event_key = parts[0], parts[1]
 
-    if chat_id not in active_events or event_key not in active_events[chat_id]:
-        return bot.answer_callback_query(call.id, "Событие не найдено.")
-
+    if chat_id not in active_events or event_key not in active_events[chat_id]: return
     event = active_events[chat_id][event_key]
-
-    if user_id not in users_db:
-        return bot.answer_callback_query(call.id, "Сначала напиши /start в личку!", show_alert=True)
+    if user_id not in users_db: return bot.answer_callback_query(call.id, "Сначала напиши /start в личку!", show_alert=True)
 
     if action == "join":
         if event['type'] == 'hockey':
-            if user_id not in event['members']:
-                event['members'][user_id] = {'friends': [], 'paid': 'no'}
+            if user_id not in event['members']: event['members'][user_id] = {'friends': [], 'paid': 'no'}
         else:
-            if user_id not in event['members']:
-                event['members'][user_id] = {'paid': 'no'}
+            if user_id not in event['members']: event['members'][user_id] = {'paid': 'no'}
         bot.answer_callback_query(call.id, "Ты в списке.")
-
     elif action == "leave":
-        if user_id in event['members']:
-            del event['members'][user_id]
+        if user_id in event['members']: del event['members'][user_id]
         bot.answer_callback_query(call.id, "Ты выписан.")
-
     elif action == "addfriend":
         if user_id in event['members']:
             event['members'][user_id]['friends'].append(True)
             bot.answer_callback_query(call.id, "Друг добавлен.")
-        else:
-            bot.answer_callback_query(call.id, "Сначала впишись.")
-
+        else: bot.answer_callback_query(call.id, "Сначала впишись.")
     elif action == "removefriend":
         if user_id in event['members'] and event['members'][user_id]['friends']:
             event['members'][user_id]['friends'].pop()
-            bot.answer_callback_query(call.id, "Последний друг убран.")
-        else:
-            bot.answer_callback_query(call.id, "Нет друзей для удаления.")
-
+            bot.answer_callback_query(call.id, "Друг убран.")
     elif action == "pay":
-        if event['type'] == 'hockey':
-            if user_id not in event['members']:
-                return bot.answer_callback_query(call.id, "Сначала нажми 'Вписаться'!", show_alert=True)
-
-        if event['type'] == 'kopilka':
-            if user_id not in event['members']:
-                event['members'][user_id] = {'paid': 'no'}
-
+        if event['type'] == 'hockey' and user_id not in event['members']:
+            return bot.answer_callback_query(call.id, "Сначала нажми 'Вписаться'!", show_alert=True)
+        if event['type'] == 'kopilka' and user_id not in event['members']:
+            event['members'][user_id] = {'paid': 'no'}
         event['members'][user_id]['paid'] = 'pending'
         bot.answer_callback_query(call.id, "Отправлено админу.")
         send_event_message(chat_id, event_key)
-
         username = users_db.get(user_id, "Неизвестный")
         confirm_data = f"confirm:{event_key}:{user_id}:{chat_id}"
-
-        bot.send_message(SUPER_ADMIN_ID, f"Пользователь {username} нажал кнопку оплаты в сборе '{event['title']}'.")
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Подтвердить", callback_data=confirm_data))
+        bot.send_message(SUPER_ADMIN_ID, f"{username} нажал кнопку оплаты в сборе '{event['title']}'.")
+        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("Подтвердить", callback_data=confirm_data))
         bot.send_message(SUPER_ADMIN_ID, f"Подтвердить оплату для {username}?", reply_markup=markup)
-
     send_event_message(chat_id, event_key)
 
-# ==========================================
-# ЗАПУСК
-# ==========================================
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
     print("Бот запущен.")
