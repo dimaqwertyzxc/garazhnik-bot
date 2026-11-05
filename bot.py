@@ -4,7 +4,9 @@ import os
 import threading
 from flask import Flask
 
+# ВСТАВЬ СЮДА СВОЙ НОВЫЙ ТОКЕН
 bot = telebot.TeleBot("9287903988:AAGB3sZLxhS2IeTOW99STwOQhgMKwdYvhH8")
+
 SUPER_ADMIN_ID = 8290888308
 
 admins = {SUPER_ADMIN_ID}
@@ -29,8 +31,6 @@ def start_private(message):
     if message.chat.type == 'private':
         bot.send_message(message.chat.id, "Напиши свое имя для регистрации.")
         bot.register_next_step_handler(message, save_name)
-    else:
-        bot.reply_to(message, "Бот-казначей запущен.")
 
 def save_name(message):
     users_db[message.from_user.id] = message.text
@@ -63,6 +63,7 @@ def send_event_message(chat_id, event_key):
         text += f"Сумма: **{event['price']} руб.**\n"
     if event['type'] in ['kopilka', 'hockey']:
         text += f"Перевод: `{event['requisites']}`\nЧек: `{event['check_to']}`\n"
+
     text += "\n**СПИСОК:**\n"
     idx = 1
     if event['type'] in ['list', 'kopilka']:
@@ -104,8 +105,6 @@ def send_event_message(chat_id, event_key):
 
 @bot.message_handler(commands=['kamorka'])
 def create_kamorka(message):
-    try: bot.delete_message(message.chat.id, message.message_id)
-    except: pass
     if not is_admin(message.from_user.id): return
     try:
         args = message.text.replace('/kamorka', '').strip().split(',')
@@ -120,11 +119,12 @@ def create_kamorka(message):
     msg = bot.reply_to(message, "Создаю...")
     active_events[chat_id]['kamorka']['message_id'] = msg.message_id
     send_event_message(chat_id, 'kamorka')
+    
+    try: bot.delete_message(message.chat.id, message.message_id)
+    except: pass
 
 @bot.message_handler(commands=['kopilka'])
 def create_kopilka(message):
-    try: bot.delete_message(message.chat.id, message.message_id)
-    except: pass
     if not is_admin(message.from_user.id): return
     try:
         parts = message.text.replace('/kopilka', '').strip().split(',')
@@ -141,11 +141,12 @@ def create_kopilka(message):
     msg = bot.reply_to(message, "Создаю...")
     active_events[chat_id]['kopilka']['message_id'] = msg.message_id
     send_event_message(chat_id, 'kopilka')
+    
+    try: bot.delete_message(message.chat.id, message.message_id)
+    except: pass
 
 @bot.message_handler(commands=['hockey'])
 def create_hockey(message):
-    try: bot.delete_message(message.chat.id, message.message_id)
-    except: pass
     if not is_admin(message.from_user.id): return
     try:
         args = message.text.replace('/hockey', '').strip().split(',')
@@ -162,6 +163,9 @@ def create_hockey(message):
     msg = bot.reply_to(message, "Создаю...")
     active_events[chat_id]['hockey']['message_id'] = msg.message_id
     send_event_message(chat_id, 'hockey')
+    
+    try: bot.delete_message(message.chat.id, message.message_id)
+    except: pass
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_buttons(call):
@@ -170,7 +174,8 @@ def handle_buttons(call):
     data = call.data
 
     if data.startswith("confirm:"):
-        if call.from_user.id != SUPER_ADMIN_ID: return bot.answer_callback_query(call.id, "Ты не админ.")
+        if call.from_user.id != SUPER_ADMIN_ID: 
+            return bot.answer_callback_query(call.id, "Ты не админ.")
         _, ev_key, uid, target_chat_id = data.split(':')
         uid, target_chat_id = int(uid), int(target_chat_id)
         if target_chat_id in active_events and ev_key in active_events[target_chat_id]:
@@ -182,7 +187,6 @@ def handle_buttons(call):
 
     parts = data.split('_')
     action, event_key = parts[0], parts[1]
-
     if chat_id not in active_events or event_key not in active_events[chat_id]: return
     event = active_events[chat_id][event_key]
     if user_id not in users_db: return bot.answer_callback_query(call.id, "Сначала напиши /start в личку!", show_alert=True)
@@ -204,7 +208,8 @@ def handle_buttons(call):
     elif action == "removefriend":
         if user_id in event['members'] and event['members'][user_id]['friends']:
             event['members'][user_id]['friends'].pop()
-            bot.answer_callback_query(call.id, "Друг убран.")
+            bot.answer_callback_query(call.id, "Последний друг убран.")
+        else: bot.answer_callback_query(call.id, "Нет друзей для удаления.")
     elif action == "pay":
         if event['type'] == 'hockey' and user_id not in event['members']:
             return bot.answer_callback_query(call.id, "Сначала нажми 'Вписаться'!", show_alert=True)
@@ -215,7 +220,7 @@ def handle_buttons(call):
         send_event_message(chat_id, event_key)
         username = users_db.get(user_id, "Неизвестный")
         confirm_data = f"confirm:{event_key}:{user_id}:{chat_id}"
-        bot.send_message(SUPER_ADMIN_ID, f"{username} нажал кнопку оплаты в сборе '{event['title']}'.")
+        bot.send_message(SUPER_ADMIN_ID, f"Пользователь {username} нажал кнопку оплаты в сборе '{event['title']}'.")
         markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("Подтвердить", callback_data=confirm_data))
         bot.send_message(SUPER_ADMIN_ID, f"Подтвердить оплату для {username}?", reply_markup=markup)
     send_event_message(chat_id, event_key)
