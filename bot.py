@@ -4,7 +4,7 @@ import os
 import threading
 from flask import Flask
 
-bot = telebot.TeleBot("9287903988:AAFgxZZVwAQzkqu81J8pRCdQCxbMz_9-jTo")
+bot = telebot.TeleBot("9287903988:AAGB3sZLxhS2IeTOW99STwOQhgMKwdYvhH8")
 SUPER_ADMIN_ID = 8290888308
 
 admins = {SUPER_ADMIN_ID}
