@@ -5,7 +5,7 @@ import threading
 from flask import Flask
 
 # ВСТАВЬ СЮДА СВОЙ НОВЫЙ ТОКЕН
-bot = telebot.TeleBot("9287903988:AAGB3sZLxhS2IeTOW99STwOQhgMKwdYvhH8")
+bot = telebot.TeleBot("9287903988:AAG8DK1kvnNX76OH13175eUxddRsTNSfZCE")
 
 SUPER_ADMIN_ID = 8290888308
 
